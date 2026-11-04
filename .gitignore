@@ -1,0 +1,75 @@
+# ==================================
+# Python cache files
+# ==================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# ==================================
+# Virtual environments
+# ==================================
+.venv/
+venv/
+env/
+
+# ==================================
+# Environment variables and secrets
+# ==================================
+.env
+.env.*
+!.env.example
+
+# ==================================
+# ChromaDB database
+# ==================================
+chroma_db/
+
+# ==================================
+# Chat history database
+# ==================================
+chat_history.db
+*.db
+*.sqlite
+*.sqlite3
+
+# ==================================
+# Uploaded PDFs and sample documents
+# ==================================
+uploaded_pdfs/
+documents/
+
+# ==================================
+# Testing files
+# ==================================
+test_*.py
+app/gemini_test.py
+app/test_env.py
+# Old development scripts
+main.py
+app/chroma_search.py
+app/semantic_search.py
+
+# ==================================
+# IntelliJ IDEA
+# ==================================
+.idea/
+*.iml
+
+# ==================================
+# OS files
+# ==================================
+.DS_Store
+Thumbs.db
+
+# ==================================
+# Logs
+# ==================================
+*.log
+
+# ==================================
+# Temporary files
+# ==================================
+*.tmp
+*.temp
+
