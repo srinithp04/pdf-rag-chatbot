@@ -222,7 +222,202 @@ touch_collection(collection_name)
 
 
 # ==========================================
-# SIDEBAR
+# MAIN PAGE PDF UPLOADER
+# ==========================================
+
+st.markdown(
+    '<div class="section-heading">📤 Upload documents</div>',
+    unsafe_allow_html=True
+)
+
+st.caption(
+    "Add up to 3 PDFs to your knowledge base. "
+    "Maximum 10 MB per PDF and 25 MB combined."
+)
+
+uploaded_files = st.file_uploader(
+    "Choose PDF files",
+    type=["pdf"],
+    accept_multiple_files=True,
+    key="pdf_uploader"
+)
+
+
+# ==========================================
+# VALIDATE AND PROCESS UPLOADS
+# ==========================================
+
+if uploaded_files:
+
+    total_size = sum(
+        file.size for file in uploaded_files
+    )
+
+    if len(uploaded_files) > MAX_FILES:
+
+        st.error(
+            "Maximum 3 PDFs can be selected at a time."
+        )
+
+    elif any(
+            file.size > MAX_FILE_SIZE
+            for file in uploaded_files
+    ):
+
+        st.error(
+            "Each PDF must not exceed 10 MB."
+        )
+
+    elif total_size > MAX_TOTAL_SIZE:
+
+        st.error(
+            "Combined upload size must not exceed 25 MB."
+        )
+
+    else:
+
+        file_hashes = {}
+
+        for file in uploaded_files:
+
+            file_hash = hashlib.sha256(
+                file.getvalue()
+            ).hexdigest()
+
+            file_hashes[file.name] = file_hash
+
+        file_signature = tuple(
+            sorted(file_hashes.values())
+        )
+
+        if (
+                file_signature
+                != st.session_state.last_upload_signature
+        ):
+
+            existing_hashes = {
+                pdf["hash"]
+                for pdf in st.session_state.pdf_details
+            }
+
+            new_hashes = (
+                    set(file_hashes.values()) - existing_hashes
+            )
+
+            current_count = len(
+                st.session_state.pdf_details
+            )
+
+            if current_count + len(new_hashes) > MAX_FILES:
+
+                st.error(
+                    f"You already have {current_count} PDFs. "
+                    f"You can add only "
+                    f"{MAX_FILES - current_count} more."
+                )
+
+            elif not new_hashes:
+
+                st.info(
+                    "These PDFs are already uploaded."
+                )
+
+                st.session_state.last_upload_signature = (
+                    file_signature
+                )
+
+            else:
+
+                with st.spinner("Processing your PDFs..."):
+
+                    try:
+
+                        with tempfile.TemporaryDirectory(
+                                prefix="pdf_rag_"
+                        ) as temp_dir:
+
+                            upload_folder = Path(temp_dir)
+
+                            pdf_paths = []
+
+                            for file in uploaded_files:
+
+                                safe_name = Path(file.name).name
+
+                                pdf_path = (
+                                        upload_folder / safe_name
+                                )
+
+                                with open(pdf_path, "wb") as f:
+                                    f.write(file.getvalue())
+
+                                pdf_paths.append(pdf_path)
+
+                            result = process_pdfs(
+                                pdf_paths,
+                                collection_name,
+                                replace_existing=False
+                            )
+
+                        st.session_state.pdf_processed = (
+                            collection_has_documents(
+                                collection_name
+                            )
+                        )
+
+                        st.session_state.pdf_details = (
+                            get_pdf_metadata(collection_name)
+                        )
+
+                        st.session_state.last_upload_signature = (
+                            file_signature
+                        )
+
+                        if result["success"]:
+
+                            st.success(
+                                "PDFs processed successfully!"
+                            )
+
+                            st.caption(
+                                f"New chunks created: "
+                                f"{result['total_chunks']}"
+                            )
+
+                        elif result["skipped_pdfs"]:
+
+                            st.info(
+                                "No new PDFs were added."
+                            )
+
+                        else:
+
+                            st.error(result["message"])
+
+                        if result["skipped_pdfs"]:
+
+                            with st.expander("Skipped PDFs"):
+
+                                for name, reason in result[
+                                    "skipped_pdfs"
+                                ]:
+
+                                    st.write(
+                                        f"⚠️ {name} - {reason}"
+                                    )
+
+                    except Exception as e:
+
+                        st.error(
+                            f"PDF processing failed: {e}"
+                        )
+
+
+st.divider()
+
+
+# ==========================================
+# SIDEBAR - DOCUMENT MANAGEMENT
 # ==========================================
 
 with st.sidebar:
@@ -234,198 +429,6 @@ with st.sidebar:
     )
 
     st.divider()
-
-    st.markdown("### 📤 Upload documents")
-
-    st.caption(
-        "Add up to 3 PDFs to your knowledge base."
-    )
-
-    uploaded_files = st.file_uploader(
-        "Choose PDF files",
-        type=["pdf"],
-        accept_multiple_files=True,
-        key="pdf_uploader"
-    )
-
-    # --------------------------------------
-    # VALIDATE AND PROCESS
-    # --------------------------------------
-
-    if uploaded_files:
-
-        total_size = sum(
-            file.size for file in uploaded_files
-        )
-
-        if len(uploaded_files) > MAX_FILES:
-
-            st.error(
-                "Maximum 3 PDFs can be selected at a time."
-            )
-
-        elif any(
-                file.size > MAX_FILE_SIZE
-                for file in uploaded_files
-        ):
-
-            st.error(
-                "Each PDF must not exceed 10 MB."
-            )
-
-        elif total_size > MAX_TOTAL_SIZE:
-
-            st.error(
-                "Combined upload size must not exceed 25 MB."
-            )
-
-        else:
-
-            file_hashes = {}
-
-            for file in uploaded_files:
-
-                file_hash = hashlib.sha256(
-                    file.getvalue()
-                ).hexdigest()
-
-                file_hashes[file.name] = file_hash
-
-            file_signature = tuple(
-                sorted(file_hashes.values())
-            )
-
-            if (
-                    file_signature
-                    != st.session_state.last_upload_signature
-            ):
-
-                existing_hashes = {
-                    pdf["hash"]
-                    for pdf in st.session_state.pdf_details
-                }
-
-                new_hashes = (
-                        set(file_hashes.values()) - existing_hashes
-                )
-
-                current_count = len(
-                    st.session_state.pdf_details
-                )
-
-                if current_count + len(new_hashes) > MAX_FILES:
-
-                    st.error(
-                        f"You already have {current_count} PDFs. "
-                        f"You can add only "
-                        f"{MAX_FILES - current_count} more."
-                    )
-
-                elif not new_hashes:
-
-                    st.info(
-                        "These PDFs are already uploaded."
-                    )
-
-                    st.session_state.last_upload_signature = (
-                        file_signature
-                    )
-
-                else:
-
-                    with st.spinner(
-                            "Processing your PDFs..."
-                    ):
-
-                        try:
-
-                            with tempfile.TemporaryDirectory(
-                                    prefix="pdf_rag_"
-                            ) as temp_dir:
-
-                                upload_folder = Path(temp_dir)
-
-                                pdf_paths = []
-
-                                for file in uploaded_files:
-
-                                    safe_name = Path(file.name).name
-
-                                    pdf_path = (
-                                            upload_folder / safe_name
-                                    )
-
-                                    with open(pdf_path, "wb") as f:
-                                        f.write(file.getvalue())
-
-                                    pdf_paths.append(pdf_path)
-
-                                result = process_pdfs(
-                                    pdf_paths,
-                                    collection_name,
-                                    replace_existing=False
-                                )
-
-                            st.session_state.pdf_processed = (
-                                collection_has_documents(
-                                    collection_name
-                                )
-                            )
-
-                            st.session_state.pdf_details = (
-                                get_pdf_metadata(collection_name)
-                            )
-
-                            st.session_state.last_upload_signature = (
-                                file_signature
-                            )
-
-                            if result["success"]:
-
-                                st.success(
-                                    "PDFs processed successfully!"
-                                )
-
-                                st.caption(
-                                    f"New chunks created: "
-                                    f"{result['total_chunks']}"
-                                )
-
-                            elif result["skipped_pdfs"]:
-
-                                st.info(
-                                    "No new PDFs were added."
-                                )
-
-                            else:
-
-                                st.error(result["message"])
-
-                            if result["skipped_pdfs"]:
-
-                                with st.expander(
-                                        "Skipped PDFs"
-                                ):
-
-                                    for name, reason in result[
-                                        "skipped_pdfs"
-                                    ]:
-
-                                        st.write(
-                                            f"⚠️ {name} - {reason}"
-                                        )
-
-                        except Exception as e:
-
-                            st.error(
-                                f"PDF processing failed: {e}"
-                            )
-
-    st.divider()
-
-    # --------------------------------------
-    # DOCUMENT LIST
-    # --------------------------------------
 
     st.markdown("### 📁 Your documents")
 
@@ -529,7 +532,7 @@ if st.session_state.pdf_processed:
 else:
 
     st.info(
-        "Upload a PDF using the sidebar to start chatting."
+        "Upload a PDF above to start chatting."
     )
 
 
